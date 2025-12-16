@@ -1,0 +1,20 @@
+{
+  "name": "websockets",
+  "module": "index.ts",
+  "type": "module",
+  "private": true,
+  "devDependencies": {
+    "@types/bun": "latest"
+  },
+  "peerDependencies": {
+    "typescript": "^5"
+  },
+  "dependencies": {
+    "@types/express": "^5.0.6",
+    "@types/ws": "^8.18.1",
+    "express": "^5.2.1",
+    "uuid": "^13.0.0",
+    "uuidv4": "^6.2.13",
+    "ws": "^8.18.3"
+  }
+}
