@@ -2,7 +2,6 @@ export class signalling{
     private connection : RTCPeerConnection;
     private socket : WebSocket;
 
-
     public onRemoteStream: ((stream: MediaStream) => void) | null = null;
 
     constructor(socket : WebSocket){
@@ -50,6 +49,13 @@ export class signalling{
         };
     };
 
+    public addLocalStream = (stream: MediaStream) => {
+        console.log("Adding local tracks to connection");
+        stream.getTracks().forEach(track => {
+            this.connection.addTrack(track, stream);
+        });
+    }
+
     //CreateOFfer
     public createOffer = async ()=>{
         console.log("Creating offer ....")
@@ -93,12 +99,5 @@ export class signalling{
         } catch (error) {
             console.log("Ice Candidate Error : ", error);
         }   
-    }
-
-    public addLocalStream = (stream : MediaStream)=>{
-        console.log("Adding local tracks to connection");
-        stream.getTracks().forEach(track => {
-            this.connection.addTrack(track, stream)
-        });
     }
 }

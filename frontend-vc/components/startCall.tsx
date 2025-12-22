@@ -2,7 +2,7 @@
 
 import { roomContext } from '@/context/roomContext';
 import { useSocket } from '@/hooks/useSocket'
-import { signalling } from '@/signalling/singalling'; // Ensure spelling matches your file
+import { signalling } from '@/signalling/singalling'; 
 import { RoomCreatedandJoined } from '@/types/roomTypes';
 import { useContext, useEffect, useRef, useState } from 'react'
 
@@ -14,6 +14,15 @@ export const StartCall = () => {
     const [role, setRole] = useState("Idle");
     const [status, setStatus] = useState("Connecting to server...");
 
+    const [isInCall, setIsInCall] = useState(false);
+
+    const localVideoRef = useRef<HTMLVideoElement | null>(null);
+    const remoteVideoRef = useRef<HTMLVideoElement | null>(null);
+  
+    const localStreamRef = useRef<MediaStream | null>(null);
+    const remoteStreamRef = useRef<MediaStream | null>(null);
+
+
     const signallingRef = useRef<signalling | null>(null);
 
     // Initialize Signalling Class
@@ -21,7 +30,25 @@ export const StartCall = () => {
         if (!ws || signallingRef.current) return;
         signallingRef.current = new signalling(ws);
         setStatus("Connected to Server");
+        signallingRef.current.onRemoteStream = (stream) => {
+            console.log("Setting Remote Stream in UI");
+            remoteStreamRef.current = stream;
+          
+            if (remoteVideoRef.current) {
+              remoteVideoRef.current.srcObject = stream;
+              remoteVideoRef.current.play().catch(() => {});
+            }
+          };
     }, [ws]);
+
+    useEffect(() => {
+        if (!localStreamRef.current || !localVideoRef.current) return;
+      
+        localVideoRef.current.srcObject = localStreamRef.current;
+      
+        // Important for Safari & Chrome
+        localVideoRef.current.play().catch(() => {});
+    }, [localStreamRef.current, isInCall]);
 
     // WebSocket Event Listeners
     useEffect(() => {
@@ -41,12 +68,17 @@ export const StartCall = () => {
             if (parse.event === "room-ready") {
                 setRole(parse.role);
                 setStatus(`Room Ready (Role: ${parse.role})`);
+
+                if (localStreamRef.current && signallingRef.current) {
+                    signallingRef.current.addLocalStream(localStreamRef.current);
+                }
                 
                 // Auto-start if offerer, otherwise wait or use manual button
                 if (parse.role === "offerer") {
                     console.log("Auto-starting signalling...");
                     signallingRef.current?.createOffer();
                 }
+                setIsInCall(true);
             };
 
             if (parse.event === "offer") {
@@ -87,7 +119,7 @@ export const StartCall = () => {
                 signallingRef.current?.iceCandidate({candidate : can})
             }
         }
-    }, [ws, room]);
+    }, [ws, room, localStreamRef.current]);
 
     const createRoom = () => {
         if (!ws || ws.readyState !== WebSocket.OPEN) {
@@ -96,6 +128,31 @@ export const StartCall = () => {
         }
         ws.send(JSON.stringify({ event: "create-room" }));
     };
+
+    useEffect(() => {
+        const startCamera = async () => {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ 
+                    video: true, 
+                    audio: true 
+                });
+                localStreamRef.current = stream;
+                if (localVideoRef.current) {
+                    localVideoRef.current.srcObject = stream;
+                }
+            } catch (err) {
+                console.error("Error accessing camera:", err);
+                setStatus("Camera Error: Check permissions");
+            }
+        };
+        startCamera();
+    }, []);
+
+    useEffect(()=>{
+        if (remoteStreamRef.current && remoteVideoRef.current){
+            remoteVideoRef.current.srcObject = remoteStreamRef.current;
+        }
+    },[remoteStreamRef])
 
     const joinRoom = () => {
         if (!ws || ws.readyState !== WebSocket.OPEN || !joinRoomId) {
@@ -115,9 +172,50 @@ export const StartCall = () => {
     const copyRoomId = () => {
         if (room?.roomId) {
             navigator.clipboard.writeText(room.roomId);
-            alert("Room ID copied to clipboard!");
         }
     };
+
+    if (isInCall) {
+        return (
+            <div className="min-h-screen bg-black text-white p-4 flex flex-col items-center">
+                <div className="w-full max-w-6xl flex-1 flex flex-col md:flex-row gap-4 justify-center items-center">
+                    
+                    {/* Remote Video (Big) */}
+                    <div className="relative w-full md:w-2/3 aspect-video bg-slate-900 rounded-2xl overflow-hidden border border-slate-800 shadow-2xl">
+                        <video 
+                            ref={remoteVideoRef} 
+                            autoPlay 
+                            playsInline 
+                            className="w-full h-full object-cover"
+                        />
+                        <div className="absolute bottom-4 left-4 bg-black/50 px-3 py-1 rounded text-sm font-medium">
+                            Remote User
+                        </div>
+                    </div>
+
+                    {/* Local Video (Small/Side) */}
+                    <div className="relative w-full md:w-1/3 aspect-video bg-slate-900 rounded-2xl overflow-hidden border border-slate-800 shadow-xl">
+                        <video 
+                            ref={localVideoRef} 
+                            autoPlay 
+                            playsInline 
+                            muted // Mute local video to prevent echo
+                            className="w-full h-full object-cover"
+                        />
+                        <div className="absolute bottom-4 left-4 bg-black/50 px-3 py-1 rounded text-sm font-medium">
+                            You
+                        </div>
+                    </div>
+                </div>
+
+                <div className="mt-6 flex gap-4">
+                    <button onClick={() => window.location.reload()} className="bg-red-600 hover:bg-red-700 text-white px-8 py-3 rounded-full font-bold shadow-lg transition transform hover:scale-105">
+                        End Call
+                    </button>
+                </div>
+            </div>
+        );
+    }
 
     return (
         <div className="min-h-screen bg-slate-950 text-white flex items-center justify-center p-4 font-sans">
@@ -201,16 +299,6 @@ export const StartCall = () => {
                                 </span>
                             </div>
                             
-                            <button 
-                                onClick={handleManualSignal} 
-                                className="w-full py-4 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl shadow-lg shadow-emerald-900/20 transition-all flex items-center justify-center space-x-2 group"
-                            >
-                                <span className="group-hover:animate-pulse">⚡</span>
-                                <span>Start Signalling (Manual)</span>
-                            </button>
-                            <p className="mt-2 text-center text-xs text-slate-500">
-                                Usually starts automatically. Click if connection hangs.
-                            </p>
                         </div>
                     )}
                 </div>

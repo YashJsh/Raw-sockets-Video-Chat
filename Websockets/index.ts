@@ -2,7 +2,7 @@ import express from "express";
 import http from "node:http";
 import { WebSocketServer } from "ws";
 import { Room } from "./room";
-import { WebSocket } from "ws";
+
 import { signalling } from "./socket";
 
 const app = express();
