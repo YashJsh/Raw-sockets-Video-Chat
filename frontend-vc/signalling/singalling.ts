@@ -100,4 +100,9 @@ export class signalling{
             console.log("Ice Candidate Error : ", error);
         }   
     }
+
+    public dataStats = async () => {
+        const stats = await this.connection.getStats();
+        return stats;
+    };
 }
